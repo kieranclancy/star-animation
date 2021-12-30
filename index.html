@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Star Animation</title>
+    <script>
+        // state: 0=uninitialised, 1=running, 2=stopping, 3=stopped
+        var animation_state = 0;
+        var start = Date.now();
+
+        function draw() {
+            var canvas_size = 800;
+            var canvas_centre = [canvas_size/2, canvas_size/2];
+            var outer_radius = canvas_size/2 - 10;
+            var star_vertices = parseInt(document.getElementById('star_vertices').value);
+            var star_density = parseInt(document.getElementById('star_density').value);
+            if (star_density < 1 || star_vertices <= star_density) {
+                // Bad parameters.
+                animation_state = 3;
+                return;
+            }
+            var circumference_multiple = star_density/star_vertices;
+            var radius = outer_radius * circumference_multiple;
+            var offset = parseInt(document.getElementById('offset').value)/100;
+            var inner_velocity = 1.0 / circumference_multiple - 1;
+            var loops = star_density;
+            var repeats = star_vertices - star_density;
+            var dot_radius = 5;
+            var star_gcd = gcd(star_vertices, star_density);
+
+            // Draw background.
+            var background = document.getElementById('background');
+            if (!background.getContext) {
+                alert('Your browser does not support 2d canvas elements, try another browser.');
+                return;
+            }
+            var background_ctx = background.getContext('2d');
+            function draw_background() {
+                var ctx = background_ctx;
+                ctx.clearRect(0, 0, canvas_size, canvas_size);
+
+                // Outer circle.
+                if (document.getElementById('show_circles').checked) {
+                    ctx.strokeStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(canvas_centre[0], canvas_centre[1], outer_radius, 0, 2*Math.PI);
+                    ctx.stroke();
+                }
+
+                // Trace star.
+                if (document.getElementById('show_path').checked) {
+                    var steps = 1000;
+                    ctx.strokeStyle = 'green';
+                    ctx.beginPath();
+                    ctx.moveTo(canvas_centre[0] + (outer_radius - (1-offset) * radius), canvas_centre[1]);
+                    for (var i=0; i<loops*steps; i++) {
+                        var angle = 2 * Math.PI / steps * i;
+                        var inner_centre = [
+                            canvas_centre[0] + Math.cos(angle) * (outer_radius - radius),
+                            canvas_centre[1] - Math.sin(angle) * (outer_radius - radius)
+                        ];
+                        var inner_angle = - 2 * Math.PI / steps * i * inner_velocity;
+                        ctx.lineTo(
+                            inner_centre[0] + offset * radius * Math.cos(inner_angle),
+                            inner_centre[1] - offset * radius * Math.sin(inner_angle)
+                        );
+                    }
+                    // ctx.closePath();
+                    ctx.stroke();
+                }
+            }
+            draw_background();
+
+            var animation = document.getElementById('animation');
+            var animation_ctx = animation.getContext('2d');
+            var rotspeed = parseInt(document.getElementById('speed').value)/500;
+            var animate = function() {
+                if (animation_state == 2) {
+                    // Stopping.
+                    animation_state = 3; // Stopped.
+                    return;
+                }
+                var now = Date.now();
+                var progress = ((now - start)/1000*rotspeed) % loops;
+                var ctx = animation_ctx;
+
+                ctx.clearRect(0, 0, canvas_size, canvas_size);
+
+                var circle_centres = [];
+                var circle_points = [];
+
+                // Calculate all circle centre and point locations.
+                for (var i=0; i < repeats; i++) {
+                    var angle = (progress + i/repeats) * 2 * Math.PI;
+                    var centre = [
+                        canvas_centre[0] + Math.cos(angle) * (outer_radius - radius),
+                        canvas_centre[1] - Math.sin(angle) * (outer_radius - radius)
+                    ];
+                    circle_centres.push(centre);
+                    var points = [];
+                    var inner_angle = -progress * 2 * Math.PI * inner_velocity;
+                    for (var j=0; j<loops; j++) {
+                        var point = [
+                            centre[0] + Math.cos(inner_angle + j*2*Math.PI / loops) * offset * radius,
+                            centre[1] - Math.sin(inner_angle + j*2*Math.PI / loops) * offset * radius,
+                        ];
+                        points.push(point);
+                    }
+                    circle_points.push(points);
+                }
+
+                // Draw circles
+                if (document.getElementById('show_circles').checked) {
+                    ctx.strokeStyle = 'orange';
+                    for (var i=0; i < repeats; i++) {
+                        ctx.beginPath();
+                        ctx.arc(
+                            circle_centres[i][0],
+                            circle_centres[i][1],
+                            radius,
+                            0,
+                            2*Math.PI
+                        );
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw intra-circle polygons.
+                if (document.getElementById('show_intra').checked) {
+                    ctx.strokeStyle = 'red';
+                    for (var i=0; i < repeats; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(circle_points[i][0][0], circle_points[i][0][1]);
+                        for (var j=1; j < loops; j++) {
+                            ctx.lineTo(circle_points[i][j][0], circle_points[i][j][1]);
+                        }
+                        ctx.closePath();
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw inter-circle polygons.
+                if (document.getElementById('show_inter').checked) {
+                    ctx.strokeStyle = 'blue';
+                    for (var j=0; j < loops; j++) {
+                        ctx.beginPath();
+                        ctx.moveTo(circle_points[0][j][0], circle_points[0][j][1]);
+                        for (var i=1; i < repeats; i++) {
+                            ctx.lineTo(circle_points[i][j][0], circle_points[i][j][1]);
+                        }
+                        ctx.closePath();
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw points.
+                if (document.getElementById('show_points').checked) {
+                    for (var i=0; i < repeats; i++) {
+                        for (var j=0; j < loops; j++) {
+                            ctx.beginPath();
+                            ctx.arc(
+                                circle_points[i][j][0],
+                                circle_points[i][j][1],
+                                dot_radius,
+                                0,
+                                2*Math.PI
+                            );
+                            ctx.fill();
+                        }
+                    }
+                }
+
+                window.requestAnimationFrame(animate);
+            };
+            animation_state = 1; // running
+            window.requestAnimationFrame(animate);
+        }
+        function restart() {
+            if (animation_state == 3) {
+                // Already stopped.
+                draw();
+                return;
+            }
+            if (animation_state != 1) return;
+            animation_state = 2; // stopping
+            var draw_when_stopped = function() {
+                if (animation_state != 3) {
+                    window.requestAnimationFrame(draw_when_stopped);
+                    return;
+                }
+                draw();
+            };
+            window.requestAnimationFrame(draw_when_stopped);
+        }
+        function gcd(a, b) {
+            if (b == 0) {
+                return a;
+            }
+            return gcd(b, a % b);
+        }
+    </script>
+    <style>
+        #render {
+            width: 800px;
+            height: 800px;
+            position: relative;
+            display: block;
+        }
+        #options {
+            display: block;
+        }
+        canvas {
+            border: 0px;
+            position: absolute;
+        }
+        .flex {
+            display: flex;
+        }
+        #background {
+            z-index: 1;
+            opacity: 0.5;
+        }
+        #animation {
+            z-index: 2;
+        }
+        body {
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body onload="draw();">
+    <div class="flex">
+        <div id="options">
+            <label for="star_vertices">Vertices:</label>
+            <input type="number" id="star_vertices" value="7" onchange="restart();" />
+            <br/>
+            <label for="star_vertices">Star density:</label>
+            <input type="number" id="star_density" value="3" onchange="restart();" />
+            <br/>
+            <label for="offset">Shape:</label>
+            <input type="range" id="offset" value="80" onchange="restart();" />
+            <br/>
+            <label for="speed">Speed:</label>
+            <input type="range" id="speed" value="50" onchange="restart();" />
+            <br/>
+            <input type="checkbox" id="show_circles" onchange="restart();" checked />
+            <label for="show_circles">Circles</label>
+            <br/>
+            <input type="checkbox" id="show_path" onchange="restart();" checked />
+            <label for="show_path">Path</label>
+            <br/>
+            <input type="checkbox" id="show_intra" checked />
+            <label for="show_intra">Intra-circle polygons</label>
+            <br/>
+            <input type="checkbox" id="show_inter" checked />
+            <label for="show_inter">Inter-circle polygons</label>
+            <br/>
+            <input type="checkbox" id="show_points" checked />
+            <label for="show_points">Points</label>
+        </div>
+        <div id="render">
+            <canvas id="background" width="800" height="800"></canvas>
+            <canvas id="animation" width="800" height="800"></canvas>
+        </div>
+    </div>
+    Animation by <a href="https://kieranclancy.com/">Kieran Clancy</a>.<br/>
+    Inspired by <a href="https://www.youtube.com/watch?v=oEN0o9ZGmOM">this video</a> by Mathologer (Burkard Polster).<br/>
+    This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
+</body>
+</html>
